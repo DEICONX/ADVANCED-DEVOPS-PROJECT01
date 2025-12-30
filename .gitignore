@@ -1,0 +1,15 @@
+
+# Terraform build/cache
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.backup
+**/*.log
+
+# Optional: keep lock file tracked (recommended). If you prefer ignoring, uncomment next line:
+# **/.terraform.lock.hcl
+
+# Keys/creds
+**/*.pem
+**/*.ppk
+**/*.key
