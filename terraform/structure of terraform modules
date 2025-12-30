@@ -1,0 +1,37 @@
+terraform/
+├─ bootstrap/                  # Create S3 bucket + DynamoDB table
+│  ├─ main.tf
+│  ├─ variables.tf
+│  └─ outputs.tf
+├─ root/                       # Main infra using remote backend
+│  ├─ backend.hcl              # Backend config (bucket/table/region)
+│  ├─ versions.tf
+│  ├─ provider.tf
+│  ├─ variables.tf
+│  ├─ outputs.tf
+│  ├─ main.tf
+│  └─ modules/
+│     ├─ vpc/
+│     │  ├─ main.tf
+│     │  ├─ variables.tf
+│     │  └─ outputs.tf
+│     ├─ security_groups/
+│     │  ├─ main.tf
+│     │  ├─ variables.tf
+│     │  └─ outputs.tf
+│     ├─ ec2-jenkins/
+│     │  ├─ main.tf
+│     │  ├─ variables.tf
+│     │  └─ outputs.tf
+│     ├─ ec2-sonarqube/
+│     │  ├─ main.tf
+│     │  ├─ variables.tf
+│     │  └─ outputs.tf
+│     ├─ ec2-nexus/
+│     │  ├─ main.tf
+│     │  ├─ variables.tf
+│     │  └─ outputs.tf
+│     └─ ec2-docker/
+│        ├─ main.tf
+│        ├─ variables.tf
+│        └─ outputs.tf
