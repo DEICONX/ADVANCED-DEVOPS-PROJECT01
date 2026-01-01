@@ -1,0 +1,168 @@
+
+---
+# roles/jenkins/tasks/main.yml
+
+# 0) Clean any legacy Jenkins sources
+- name: Remove legacy Jenkins entries from /etc/apt/sources.list
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list
+    regexp: '^deb\s+(\[.*\]\s+)?https?://pkg\.jenkins\.io/debian(-stable)?\s+binary/?$'
+    state: absent
+  become: true
+
+- name: Remove any old /etc/apt/sources.list.d/jenkins.list
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/jenkins.list
+    state: absent
+  become: true
+
+# 1) Install prerequisites and repo
+- name: Install base prerequisites
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Create directory for Jenkins keyring
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Download Jenkins apt key into keyring
+  ansible.builtin.get_url:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    dest: /etc/apt/keyrings/jenkins-keyring.asc
+    mode: "0644"
+  become: true
+
+- name: Add Jenkins apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/jenkins.list
+    content: |
+      deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+  become: true
+
+# 2) Install Java & Jenkins
+- name: Install Java 21
+  ansible.builtin.apt:
+    name: openjdk-21-jre
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Install Jenkins
+  ansible.builtin.apt:
+    name: jenkins
+    state: present
+    update_cache: yes
+  become: true
+
+# 3) Configure Jenkins port & disable wizard
+- name: Configure Jenkins HTTP port
+  ansible.builtin.lineinfile:
+    path: /etc/default/jenkins
+    regexp: '^HTTP_PORT='
+    line: 'HTTP_PORT={{ jenkins_http_port | default(8080) }}'
+    create: yes
+    backup: yes
+  become: true
+
+- name: Disable setup wizard (headless)
+  ansible.builtin.lineinfile:
+    path: /etc/default/jenkins
+    regexp: '^JAVA_ARGS='
+    line: 'JAVA_ARGS="-Djenkins.install.runSetupWizard=false"'
+    create: yes
+    backup: yes
+  become: true
+
+- name: Ensure init.groovy.d exists
+  ansible.builtin.file:
+    path: /var/lib/jenkins/init.groovy.d
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: "0755"
+  become: true
+
+# 4) Bootstrap admin user
+- name: Create admin user script
+  ansible.builtin.copy:
+    dest: /var/lib/jenkins/init.groovy.d/01-bootstrap-admin.groovy
+    owner: jenkins
+    group: jenkins
+    mode: "0644"
+    content: |
+      import jenkins.model.*
+      import hudson.security.*
+      def instance = Jenkins.getInstanceOrNull()
+      def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+      if (hudsonRealm.getUser("admin") == null) {
+        hudsonRealm.createAccount("admin", "admin123")
+      }
+      instance.setSecurityRealm(hudsonRealm)
+      def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+      strategy.setAllowAnonymousRead(false)
+      instance.setAuthorizationStrategy(strategy)
+      instance.save()
+  become: true
+
+# 5) Start/Enable and wait
+- name: Ensure Jenkins started and enabled
+  ansible.builtin.service:
+    name: jenkins
+    state: started
+    enabled: true
+  become: true
+
+- name: Wait for Jenkins port to be open
+  ansible.builtin.wait_for:
+    host: "127.0.0.1"
+    port: "{{ jenkins_http_port | default(8080) }}"
+    state: started
+    delay: 2
+    timeout: 120
+
+# (Optional) HTTP readiness check
+- name: Wait for Jenkins HTTP endpoint
+  ansible.builtin.uri:
+    url: "http://localhost:{{ jenkins_http_port }}/login"
+    method: GET
+    status_code: 200
+  register: jenkins_login
+  retries: 30
+  delay: 5
+  until: jenkins_login.status == 200
+  ignore_errors: true
+
+# 6) Install plugins via API (password/token + basic auth)
+- name: Install requested Jenkins plugins (API)
+  community.general.jenkins_plugin:
+    name: "{{ item }}"
+    state: present
+    url: "http://localhost:{{ jenkins_http_port }}/"
+    url_username: "{{ jenkins_admin_user }}"
+    url_password: "{{ jenkins_admin_password }}"  # swap to token later if desired
+    force_basic_auth: true
+    validate_certs: false
+    timeout: 180
+    with_dependencies: true
+  loop: "{{ jenkins_plugins }}"
+  become: true
+

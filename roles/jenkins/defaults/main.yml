@@ -1,0 +1,13 @@
+
+# roles/jenkins/defaults/main.yml
+jenkins_http_port: 8080
+
+jenkins_plugins:
+  - "git"
+  - "workflow-aggregator"
+  - "blueocean"
+
+# Admin credentials (used for API with crumb)
+jenkins_admin_user: "admin"
+jenkins_admin_password: "admin123"
+

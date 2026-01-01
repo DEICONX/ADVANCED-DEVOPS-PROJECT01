@@ -1,0 +1,28 @@
+
+---
+- name: SonarQube host(s)
+  hosts: role_sonarqube
+  become: true
+  roles:
+    - docker        # optional if Sonar role must install its own; you can remove here
+    - sonarqube
+
+- name: Nexus host(s)
+  hosts: role_nexus
+  become: true
+  roles:
+    - docker
+    - nexus
+
+- name: Jenkins host(s)
+  hosts: role_jenkins
+  become: true
+  roles:
+    - jenkins
+
+- name: Docker host(s)
+  hosts: role_docker
+  become: true
+  roles:
+    - docker
+

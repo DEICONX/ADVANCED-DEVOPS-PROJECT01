@@ -1,0 +1,15 @@
+
+
+sonarqube_image: "sonarqube:latest"      # choose community/developer/enterprise tags as needed
+sonarqube_port: 9000
+sonarqube_env: {}                        # add DB env if using external DB
+sonarqube_volumes:
+  - name: sonarqube_data
+    mount: /opt/sonarqube/data
+  - name: sonarqube_extensions
+    mount: /opt/sonarqube/extensions
+  - name: sonarqube_logs
+    mount: /opt/sonarqube/logs
+sysctl_vm_max_map_count: 262144          # recommended for ES-based apps
+docker_package_state: present
+

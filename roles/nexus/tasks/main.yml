@@ -1,0 +1,75 @@
+
+---
+- name: Ensure Docker installed (reuse OS steps)
+  ansible.builtin.include_role:
+    name: docker
+
+- name: Create persistent volume
+  community.docker.docker_volume:
+    name: "{{ nexus_data_volume }}"
+    state: present
+  become: true
+
+- name: Run Nexus Repository Manager 3
+  community.docker.docker_container:
+    name: nexus
+    image: "{{ nexus_image }}"
+    pull: true
+    restart_policy: always
+    ports:
+      - "{{ nexus_port }}:8081"
+    volumes:
+      - "{{ nexus_data_volume }}:/nexus-data"
+    state: started
+  become: true
+
+- name: Wait for Nexus to be reachable
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/status"
+    method: GET
+    status_code: 200
+    timeout: 30
+    validate_certs: false
+  register: nexus_status
+  retries: 20
+  delay: 15
+  until: nexus_status.status == 200
+
+# Get initial admin password from container's /nexus-data/admin.password
+- name: Read initial admin password from container
+  community.docker.docker_container_exec:
+    container: nexus
+    command: "cat /nexus-data/admin.password"
+  register: nexus_admin_pw_raw
+  changed_when: false
+  become: true
+
+- name: Set fact nexus_admin_password
+  ansible.builtin.set_fact:
+    nexus_admin_password: "{{ nexus_admin_pw_raw.stdout | trim }}"
+
+# Change admin password (optional) and create token; here we keep initial for demo.
+# Create a hosted repository via REST API
+- name: Create hosted repository (Maven example)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/repositories/maven/hosted"
+    method: POST
+    user: "admin"
+    password: "{{ nexus_admin_password }}"
+    force_basic_auth: true
+    status_code: [201, 400]  # 400 if already exists (idempotence)
+    headers:
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "{{ nexus_hosted_repo.name }}"
+      online: "{{ nexus_hosted_repo.online }}"
+      storage:
+        blobStoreName: "default"
+        strictContentTypeValidation: true
+      maven:
+        versionPolicy: "RELEASE"
+        layoutPolicy: "STRICT"
+  register: repo_create
+  changed_when: repo_create.status == 201
+

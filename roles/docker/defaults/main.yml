@@ -1,0 +1,10 @@
+
+docker_daemon_config:
+  log-driver: "json-file"
+  log-opts:
+    max-size: "10m"
+    max-file: "3"
+  storage-driver: "overlay2"
+docker_users:
+  - ubuntu              # users who should run docker without sudo
+

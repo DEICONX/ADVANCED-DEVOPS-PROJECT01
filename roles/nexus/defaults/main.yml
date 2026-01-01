@@ -1,0 +1,10 @@
+
+nexus_image: "sonatype/nexus3:latest"
+nexus_port: 8081
+nexus_data_volume: nexus-data
+# Hosted repo example (Maven Releases); adjust as needed
+nexus_hosted_repo:
+  name: "maven-releases"
+  format: "maven2"           # e.g., maven2, docker, npm, pypi, etc.
+  online: true
+

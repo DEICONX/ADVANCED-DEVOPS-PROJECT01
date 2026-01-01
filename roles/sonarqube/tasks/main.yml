@@ -1,0 +1,101 @@
+
+---
+# roles/sonarqube/tasks/main.yml
+
+# 1) OS prerequisites and Docker repo setup
+- name: Install base prerequisites
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+      - python3-pip
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  become: true
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+  become: true
+
+# 2) Install Docker engine + containerd
+- name: Install Docker Engine
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Ensure Docker service is started and enabled
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  become: true
+
+# 3) Install Docker SDK for Python on the target (required by community.docker modules)
+- name: Install Docker SDK for Python
+  ansible.builtin.pip:
+    name: docker
+    state: present
+    executable: pip3
+  become: true
+
+# 4) Create named volumes for SonarQube persistence
+- name: Create SonarQube Docker volumes
+  community.docker.docker_volume:
+    name: "{{ item.name }}"
+    state: present
+  loop: "{{ sonarqube_volumes }}"
+  become: true
+
+# 5) Tune vm.max_map_count for Elasticsearch (required by SonarQube bootstrap)
+- name: Tune vm.max_map_count for Elasticsearch
+  ansible.posix.sysctl:
+    name: vm.max_map_count
+    value: "{{ sysctl_vm_max_map_count }}"
+    state: present
+    reload: yes
+  become: true
+
+# 6) Build 'name:mount' strings for docker_container 'volumes' option
+- name: Build SonarQube volume bindings
+  ansible.builtin.set_fact:
+    sonar_volume_bindings: "{{ (sonar_volume_bindings | default([])) + [ item.name ~ ':' ~ item.mount ] }}"
+  loop: "{{ sonarqube_volumes }}"
+
+# 7) Run SonarQube container
+- name: Run SonarQube container
+  community.docker.docker_container:
+    name: sonarqube
+    image: "{{ sonarqube_image }}"
+    pull: true
+    restart_policy: always
+    ports:
+      - "{{ sonarqube_port }}:9000"
+    env: "{{ sonarqube_env }}"
+    volumes: "{{ sonar_volume_bindings }}"
+    state: started
+  become: true
+
+# 8) Optional: wait until port 9000 is accepting connections
+- name: Wait for SonarQube to listen on port {{ sonarqube_port }}
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default('127.0.0.1') }}"
+    port: "{{ sonarqube_port }}"
+    delay: 5
+    timeout: 120
+  when: ansible_host is defined
+
